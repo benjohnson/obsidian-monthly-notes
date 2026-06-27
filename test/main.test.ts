@@ -446,7 +446,7 @@ describe("getTemplateContent", () => {
 // ─── Plugin lifecycle ───────────────────────────────────────────────
 
 describe("onload", () => {
-	test("registers the open-monthly-note command, wired to openMonthlyNote", async () => {
+	test("registers the open-note command, wired to openMonthlyNote", async () => {
 		const plugin = createPlugin();
 		const openSpy = spyOn(plugin, "openMonthlyNote").mockResolvedValue();
 		const addCommandSpy = spyOn(plugin, "addCommand").mockImplementation((cmd: any) => cmd.callback());
@@ -454,7 +454,7 @@ describe("onload", () => {
 		await plugin.onload();
 
 		const [cmd] = addCommandSpy.mock.calls[0] as any[];
-		expect(cmd.id).toBe("open-monthly-note");
+		expect(cmd.id).toBe("open-note");
 		expect(cmd.name).toBe("Open monthly note");
 		expect(openSpy).toHaveBeenCalled();
 	});

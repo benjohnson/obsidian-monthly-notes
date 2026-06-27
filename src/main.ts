@@ -37,7 +37,7 @@ export default class MonthlyNotesPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: 'open-monthly-note',
+			id: 'open-note',
 			name: 'Open monthly note',
 			callback: () => { void this.openMonthlyNote(); },
 		});
