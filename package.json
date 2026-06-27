@@ -1,0 +1,20 @@
+{
+	"name": "monthly-notes",
+	"module": "src/main.ts",
+	"type": "module",
+	"scripts": {
+		"build": "bun build src/main.ts --external obsidian --outfile=main.js --format=cjs",
+		"dev": "bun build src/main.ts --external obsidian --outfile=main.js --format=cjs --watch",
+		"test": "bun test"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"moment": "^2.30.1"
+	},
+	"peerDependencies": {
+		"typescript": "^5.0.0"
+	},
+	"dependencies": {
+		"obsidian": "latest"
+	}
+}

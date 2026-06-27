@@ -1,0 +1,4 @@
+[test]
+# Registers the `obsidian` module mock for every test run, so a bare
+# `bun test` works the same as `bun run test` (no --preload flag to remember).
+preload = ["./test/setup.ts"]

@@ -1,0 +1,10 @@
+{
+	"id": "monthly-note",
+	"name": "Monthly note",
+	"version": "1.0.0",
+	"minAppVersion": "1.4.10",
+	"description": "Create or open this month's monthly note.",
+	"author": "Ben Johnson",
+	"authorUrl": "https://benjohnson.ca",
+	"isDesktopOnly": false
+}
