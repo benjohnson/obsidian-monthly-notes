@@ -3,7 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - '*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,6 +23,10 @@ jobs:
 
       - run: bun run build
 
+      - name: Read version from manifest
+        id: version
+        run: echo "version=$(jq -r .version manifest.json)" >> "$GITHUB_OUTPUT"
+
       # Attest provenance for the build artifacts before they're uploaded,
       # so users can cryptographically verify they came from this source.
       - uses: actions/attest-build-provenance@v2
@@ -32,6 +37,7 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && steps.version.outputs.version || github.ref_name }}
           generate_release_notes: true
           files: |
             main.js
