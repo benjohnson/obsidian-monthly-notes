@@ -1,6 +1,6 @@
 {
-	"id": "monthly-note",
-	"name": "Monthly note",
+	"id": "monthly-notes",
+	"name": "Monthly notes",
 	"version": "1.0.0",
 	"minAppVersion": "1.4.10",
 	"description": "Create or open this month's monthly note.",
