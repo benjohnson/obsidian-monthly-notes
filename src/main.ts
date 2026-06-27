@@ -13,7 +13,7 @@ export function buildNotePath(
 }
 
 export function applyTemplate(content: string, title: string, now: ReturnType<typeof moment>): string {
-	return content.replace(/\{\{\s*(title|date|time)\s*(?::\s*([^}]*?)\s*)?\}\}/gi, (match, key, format) => {
+	return content.replace(/\{\{\s*(title|date|time)\s*(?::\s*([^}]*?)\s*)?\}\}/gi, (match: string, key: string, format: string | undefined) => {
 		switch (key.toLowerCase()) {
 			// Title isn't a date, so a colon-suffix is meaningless. Leave a
 			// formatted title token (e.g. {{title:YYYY}}) untouched rather than
@@ -27,26 +27,26 @@ export function applyTemplate(content: string, title: string, now: ReturnType<ty
 }
 
 export default class MonthlyNotesPlugin extends Plugin {
-	settings!: MonthlyNotesSettings;
+	declare settings: MonthlyNotesSettings;
 
 	async onload() {
 		await this.loadSettings();
 
 		this.addRibbonIcon('calendar-days', 'Open monthly note', () => {
-			this.openMonthlyNote();
+			void this.openMonthlyNote();
 		});
 
 		this.addCommand({
 			id: 'open-monthly-note',
 			name: 'Open monthly note',
-			callback: () => this.openMonthlyNote(),
+			callback: () => { void this.openMonthlyNote(); },
 		});
 
 		this.addSettingTab(new MonthlyNotesSettingTab(this.app, this));
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<MonthlyNotesSettings>);
 	}
 
 	async saveSettings() {

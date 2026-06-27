@@ -1,7 +1,7 @@
 import { test, expect, beforeEach, spyOn, describe } from "bun:test";
 
 import MonthlyNotesPlugin, { buildNotePath, applyTemplate } from "../src/main";
-import { DEFAULT_SETTINGS, MonthlyNotesSettingTab, FolderSuggest, FileSuggest, isCustomFormat, type MonthlyNotesSettings } from "../src/settings";
+import { DEFAULT_SETTINGS, MonthlyNotesSettingTab, isCustomFormat, type MonthlyNotesSettings } from "../src/settings";
 import * as obsidianMock from "./__mocks__/obsidian";
 import moment from "moment";
 
@@ -12,7 +12,7 @@ type App = ReturnType<typeof obsidianMock.createMockApp>;
 const NOW = moment("2026-06-09T14:30:00"); // June 2026 (month 06)
 
 function createPlugin(app?: App): MonthlyNotesPlugin {
-	const plugin = new MonthlyNotesPlugin();
+	const plugin = new MonthlyNotesPlugin({} as any, {} as any);
 	if (app) plugin.app = app as any;
 	return plugin;
 }
@@ -202,6 +202,85 @@ describe("isCustomFormat", () => {
 	});
 });
 
+// ─── MonthlyNotesSettingTab dropdown translation ────────────────────
+//
+// The declarative settings API binds controls to keys on plugin.settings,
+// but the date-format dropdown is a phantom key ("dateFormatDropdown") that
+// has to be translated to/from the real "dateFormat" storage. These pin the
+// round-trip so a future refactor of the tab can't silently break it.
+
+function createSettingTab(plugin: MonthlyNotesPlugin, app?: App): MonthlyNotesSettingTab {
+	return new MonthlyNotesSettingTab((app ?? obsidianMock.createMockApp()) as any, plugin);
+}
+
+describe("MonthlyNotesSettingTab dropdown translation", () => {
+	test("getControlValue('dateFormatDropdown') returns the preset for a stored preset", () => {
+		const plugin = createPlugin();
+		plugin.settings = makeSettings({ dateFormat: "YYYY-MM" });
+		const tab = createSettingTab(plugin);
+
+		expect(tab.getControlValue("dateFormatDropdown")).toBe("YYYY-MM");
+	});
+
+	test("getControlValue('dateFormatDropdown') returns 'custom' for an empty format", () => {
+		const plugin = createPlugin();
+		plugin.settings = makeSettings({ dateFormat: "" });
+		const tab = createSettingTab(plugin);
+
+		expect(tab.getControlValue("dateFormatDropdown")).toBe("custom");
+	});
+
+	test("getControlValue('dateFormatDropdown') returns 'custom' for a non-preset format", () => {
+		const plugin = createPlugin();
+		plugin.settings = makeSettings({ dateFormat: "YYYY-MM-DD" });
+		const tab = createSettingTab(plugin);
+
+		expect(tab.getControlValue("dateFormatDropdown")).toBe("custom");
+	});
+
+	test("setControlValue('dateFormatDropdown', preset) stores the preset and saves", async () => {
+		const plugin = createPlugin();
+		plugin.settings = makeSettings({ dateFormat: "" });
+		const saveSpy = spyOn(plugin, "saveSettings").mockResolvedValue();
+		const tab = createSettingTab(plugin);
+
+		await tab.setControlValue("dateFormatDropdown", "YYYY MMMM");
+
+		expect(plugin.settings.dateFormat).toBe("YYYY MMMM");
+		expect(saveSpy).toHaveBeenCalled();
+	});
+
+	test("setControlValue('dateFormatDropdown', 'custom') stores '' and saves", async () => {
+		const plugin = createPlugin();
+		plugin.settings = makeSettings({ dateFormat: "YYYY-MM" });
+		const saveSpy = spyOn(plugin, "saveSettings").mockResolvedValue();
+		const tab = createSettingTab(plugin);
+
+		await tab.setControlValue("dateFormatDropdown", "custom");
+
+		expect(plugin.settings.dateFormat).toBe("");
+		expect(saveSpy).toHaveBeenCalled();
+	});
+
+	test("getControlValue delegates to super for the folder key", () => {
+		const plugin = createPlugin();
+		plugin.settings = makeSettings({ folder: "Monthly" });
+		const tab = createSettingTab(plugin);
+
+		expect(tab.getControlValue("folder")).toBe("Monthly");
+	});
+
+	test("setControlValue delegates to super for the template key", async () => {
+		const plugin = createPlugin();
+		plugin.settings = makeSettings();
+		const tab = createSettingTab(plugin);
+
+		await tab.setControlValue("template", "templates/monthly.md");
+
+		expect(plugin.settings.template).toBe("templates/monthly.md");
+	});
+});
+
 // ─── openMonthlyNote ───────────────────────────────────────────────
 
 describe("openMonthlyNote", () => {
@@ -361,73 +440,6 @@ describe("getTemplateContent", () => {
 		plugin.settings = makeSettings({ template: "templates\\monthly.md" });
 
 		expect(await plugin.getTemplateContent("2026-06", NOW)).toBe("hello");
-	});
-});
-
-// ─── FolderSuggest / FileSuggest ────────────────────────────────────
-
-describe("FolderSuggest", () => {
-	test("returns only folders whose path matches (case-insensitive, anywhere in path)", () => {
-		const app = obsidianMock.createMockApp(new Map([
-			["Notes/Monthly", new obsidianMock.TFolder("Notes/Monthly")],
-			["Notes/note.md", new obsidianMock.TFile("Notes/note.md", "")],
-			["other", new obsidianMock.TFolder("other")],
-		]));
-		const suggest = new FolderSuggest(app as any, { value: "" } as HTMLInputElement);
-
-		expect(suggest.getSuggestions("MONTH").map((f) => f.path)).toEqual(["Notes/Monthly"]);
-		expect(suggest.getSuggestions("notes/mo").map((f) => f.path)).toEqual(["Notes/Monthly"]);
-	});
-});
-
-describe("FileSuggest", () => {
-	test("returns only markdown files whose path matches", () => {
-		const app = obsidianMock.createMockApp(new Map([
-			["a", new obsidianMock.TFolder("a")],
-			["templates/Monthly.md", new obsidianMock.TFile("templates/Monthly.md", "")],
-			["c.png", new obsidianMock.TFile("c.png", "")],
-			["d/canvas.json", new obsidianMock.TFile("d/canvas.json", "")],
-		]));
-		const suggest = new FileSuggest(app as any, { value: "" } as HTMLInputElement);
-
-		expect(suggest.getSuggestions("").map((f) => f.path)).toEqual(["templates/Monthly.md"]);
-		expect(suggest.getSuggestions("MONTHLY").map((f) => f.path)).toEqual(["templates/Monthly.md"]);
-	});
-
-	test("a query with regex special characters matches literally", () => {
-		// Guards against a refactor from String.includes to a RegExp.
-		const app = obsidianMock.createMockApp(new Map([
-			["folder (1).md", new obsidianMock.TFile("folder (1).md", "")],
-			["[archive].md", new obsidianMock.TFile("[archive].md", "")],
-		]));
-		const suggest = new FileSuggest(app as any, { value: "" } as HTMLInputElement);
-
-		expect(suggest.getSuggestions("(1)")).toHaveLength(1);
-		expect(suggest.getSuggestions("[archive]")).toHaveLength(1);
-	});
-
-	test("results are capped at the suggester limit", () => {
-		const files = new Map<string, obsidianMock.TFile>();
-		for (let i = 0; i < 15; i++) files.set(`file${i}.md`, new obsidianMock.TFile(`file${i}.md`, ""));
-		const suggest = new FileSuggest(obsidianMock.createMockApp(files) as any, { value: "" } as HTMLInputElement);
-
-		expect(suggest.getSuggestions("").length).toBeLessThanOrEqual(10);
-	});
-
-	test("selecting a suggestion writes the path and fires the input event so the save pipeline runs", () => {
-		const events: string[] = [];
-		const inputEl = {
-			value: "",
-			dispatchEvent(e: Event) { events.push(e.type); return true; },
-		} as unknown as HTMLInputElement;
-		const suggest = new FileSuggest(obsidianMock.createMockApp() as any, inputEl);
-		const closeSpy = spyOn(suggest, "close");
-
-		suggest.selectSuggestion(new obsidianMock.TFile("templates/monthly.md", "") as any, {} as MouseEvent);
-
-		expect(inputEl.value).toBe("templates/monthly.md");
-		expect(events).toContain("input");
-		expect(closeSpy).toHaveBeenCalled();
 	});
 });
 

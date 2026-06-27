@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run build
+
+      # Attest provenance for the build artifacts before they're uploaded,
+      # so users can cryptographically verify they came from this source.
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            main.js
+            manifest.json
