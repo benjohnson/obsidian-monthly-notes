@@ -61,13 +61,20 @@ export class PluginSettingTab {
 	app!: ReturnType<typeof createMockApp>;
 	containerEl!: HTMLElement;
 	plugin!: any;
-	getControlValue(key: string): unknown {
-		return this.plugin?.settings?.[key];
+}
+
+export class AbstractInputSuggest<T> {
+	limit: number = 10;
+	protected app!: ReturnType<typeof createMockApp>;
+	protected inputEl!: HTMLInputElement;
+	constructor(app: any, inputEl: any) {
+		this.app = app;
+		this.inputEl = inputEl;
 	}
-	setControlValue(key: string, value: unknown): void {
-		if (this.plugin?.settings) this.plugin.settings[key] = value;
-	}
-	update(): void {}
+	getSuggestions(_query: string): T[] { return []; }
+	renderSuggestion(_value: T, _el: HTMLElement): void {}
+	selectSuggestion(_value: T, _evt: MouseEvent | KeyboardEvent): void {}
+	close(): void {}
 }
 
 export class Setting {
