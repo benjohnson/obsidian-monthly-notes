@@ -1,5 +1,4 @@
-import { moment, PluginSettingTab } from 'obsidian';
-import type { App, Setting, SettingDefinitionItem, TFile } from 'obsidian';
+import { AbstractInputSuggest, App, moment, PluginSettingTab, Setting, TFile, TFolder } from 'obsidian';
 import type MonthlyNotesPlugin from './main';
 
 export interface MonthlyNotesSettings {
@@ -29,112 +28,147 @@ export function isCustomFormat(format: string): boolean {
 	return !(PRESET_FORMATS as readonly string[]).includes(format);
 }
 
-// The declarative API binds each control to a key on plugin.settings, but the
-// date-format dropdown can't bind directly: its values are the preset formats
-// plus a sentinel "custom" that maps to/from the empty string in storage. This
-// phantom key is translated by the getControlValue/setControlValue overrides
-// below; the other controls (folder, template) bind to their real keys.
-const DATE_FORMAT_KEY = 'dateFormatDropdown';
+export class FolderSuggest extends AbstractInputSuggest<TFolder> {
+	protected inputEl: HTMLInputElement;
+
+	constructor(app: App, inputEl: HTMLInputElement) {
+		super(app, inputEl);
+		this.inputEl = inputEl;
+	}
+
+	getSuggestions(query: string): TFolder[] {
+		const q = query.toLowerCase();
+		return this.app.vault.getAllLoadedFiles()
+			.filter((f): f is TFolder => f instanceof TFolder && f.path.toLowerCase().includes(q))
+			.slice(0, this.limit);
+	}
+	renderSuggestion(folder: TFolder, el: HTMLElement): void {
+		el.setText(folder.path);
+	}
+	selectSuggestion(folder: TFolder, _evt: MouseEvent | KeyboardEvent): void {
+		this.inputEl.value = folder.path;
+		this.inputEl.dispatchEvent(new Event('input'));
+		this.close();
+	}
+}
+
+export class FileSuggest extends AbstractInputSuggest<TFile> {
+	protected inputEl: HTMLInputElement;
+
+	constructor(app: App, inputEl: HTMLInputElement) {
+		super(app, inputEl);
+		this.inputEl = inputEl;
+	}
+
+	getSuggestions(query: string): TFile[] {
+		const q = query.toLowerCase();
+		return this.app.vault.getAllLoadedFiles()
+			.filter((f): f is TFile => f instanceof TFile && f.extension === 'md' && f.path.toLowerCase().includes(q))
+			.slice(0, this.limit);
+	}
+	renderSuggestion(file: TFile, el: HTMLElement): void {
+		el.setText(file.path);
+	}
+	selectSuggestion(file: TFile, _evt: MouseEvent | KeyboardEvent): void {
+		this.inputEl.value = file.path;
+		this.inputEl.dispatchEvent(new Event('input'));
+		this.close();
+	}
+}
 
 export class MonthlyNotesSettingTab extends PluginSettingTab {
 	plugin: MonthlyNotesPlugin;
+	private suggesters: { close(): void }[] = [];
 
 	constructor(app: App, plugin: MonthlyNotesPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
-	getControlValue(key: string): unknown {
-		if (key === DATE_FORMAT_KEY) {
-			const format = this.plugin.settings.dateFormat;
-			return isCustomFormat(format) ? CUSTOM_OPTION : format;
-		}
-		return super.getControlValue(key);
-	}
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
 
-	async setControlValue(key: string, value: unknown): Promise<void> {
-		if (key === DATE_FORMAT_KEY) {
-			this.plugin.settings.dateFormat = value === CUSTOM_OPTION ? '' : (value as string);
-			await this.plugin.saveSettings();
-			// Re-evaluate the custom-format row's visibility so it appears when
-			// the user picks Custom and disappears when they pick a preset.
-			this.update();
-			return;
+		for (const s of this.suggesters) {
+			s.close();
 		}
-		await super.setControlValue(key, value);
-	}
+		this.suggesters = [];
 
-	getSettingDefinitions(): SettingDefinitionItem[] {
 		const now = moment();
-
-		const dropdownOptions: Record<string, string> = {};
-		for (const f of PRESET_FORMATS) {
-			dropdownOptions[f] = now.format(f);
-		}
-		dropdownOptions[CUSTOM_OPTION] = 'Custom';
-
-		return [
-			{
-				name: 'Date format',
-				desc: 'Choose how monthly notes are named in your vault.',
-				control: {
-					type: 'dropdown' as const,
-					key: DATE_FORMAT_KEY,
-					options: dropdownOptions,
-				},
-			},
-			{
-				name: 'Custom format',
-				visible: () => isCustomFormat(this.plugin.settings.dateFormat),
-				render: (setting: Setting) => this.renderCustomFormat(setting),
-			},
-			{
-				name: 'New file location',
-				desc: 'New monthly notes will be placed here.',
-				control: {
-					type: 'folder' as const,
-					key: 'folder',
-					placeholder: 'Example: folder 1/folder 2',
-				},
-			},
-			{
-				name: 'Template file location',
-				desc: 'Choose the file to use as a template.',
-				control: {
-					type: 'file' as const,
-					key: 'template',
-					placeholder: 'Example: folder/note',
-					filter: (file: TFile) => file.extension === 'md',
-				},
-			},
-		];
-	}
-
-	private renderCustomFormat(setting: Setting): void {
 		const format = this.plugin.settings.dateFormat;
-		const previewFormat = format || 'YYYY-MM';
+		const isCustom = isCustomFormat(format);
 
-		const desc = activeDocument.createDocumentFragment();
-		const wrapper = activeDocument.createElement('span');
-		wrapper.appendText('For more syntax, refer to ');
-		wrapper.createEl('a', {
-			text: 'format reference',
-			href: 'https://momentjs.com/docs/#/displaying/format/',
-		});
-		wrapper.createEl('br');
-		wrapper.appendText('Your current syntax looks like this: ');
-		const preview = wrapper.createEl('b', { cls: 'u-pop', text: moment().format(previewFormat) });
-		desc.appendChild(wrapper);
+		new Setting(containerEl)
+			.setName('Date format')
+			.setDesc('Choose how monthly notes are named in your vault.')
+			.addDropdown(dropdown => {
+				for (const f of PRESET_FORMATS) {
+					dropdown.addOption(f, now.format(f));
+				}
+				dropdown.addOption(CUSTOM_OPTION, 'Custom');
+				dropdown.setValue(isCustom ? CUSTOM_OPTION : format);
+				dropdown.onChange(async value => {
+					this.plugin.settings.dateFormat = value === CUSTOM_OPTION ? '' : value;
+					await this.plugin.saveSettings();
+					this.display();
+				});
+			});
 
-		setting.setDesc(desc).addText(text => text
-			.setValue(format)
-			.setPlaceholder('YYYY-MM')
-			.onChange(async value => {
-				this.plugin.settings.dateFormat = value;
-				await this.plugin.saveSettings();
-				// Update the preview span in place rather than re-rendering the
-				// whole tab, which would blur the text input the user is typing in.
-				preview.setText(moment().format(value || 'YYYY-MM'));
-			}));
+		if (isCustom) {
+			const previewFormat = format || 'YYYY-MM';
+			const desc = document.createDocumentFragment();
+			const wrapper = document.createElement('span');
+			wrapper.appendText('For more syntax, refer to ');
+			wrapper.createEl('a', {
+				text: 'format reference',
+				href: 'https://momentjs.com/docs/#/displaying/format/',
+			});
+			wrapper.createEl('br');
+			wrapper.appendText('Your current syntax looks like this: ');
+			wrapper.createEl('b', { cls: 'u-pop', text: now.format(previewFormat) });
+			desc.appendChild(wrapper);
+
+			new Setting(containerEl)
+				.setName('Custom format')
+				.setDesc(desc)
+				.addText(text => text
+					.setValue(format)
+					.setPlaceholder('YYYY-MM')
+					.onChange(async value => {
+						this.plugin.settings.dateFormat = value;
+						await this.plugin.saveSettings();
+						this.display();
+					}));
+		}
+
+		new Setting(containerEl)
+			.setName('New file location')
+			.setDesc('New monthly notes will be placed here.')
+			.addText(text => {
+				const suggest = new FolderSuggest(this.app, text.inputEl);
+				this.suggesters.push(suggest);
+				return text
+					.setValue(this.plugin.settings.folder)
+					.setPlaceholder('Example: folder 1/folder 2')
+					.onChange(async value => {
+						this.plugin.settings.folder = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName('Template file location')
+			.setDesc('Choose the file to use as a template.')
+			.addText(text => {
+				const suggest = new FileSuggest(this.app, text.inputEl);
+				this.suggesters.push(suggest);
+				return text
+					.setValue(this.plugin.settings.template)
+					.setPlaceholder('Example: folder/note')
+					.onChange(async value => {
+						this.plugin.settings.template = value;
+						await this.plugin.saveSettings();
+					});
+			});
 	}
 }

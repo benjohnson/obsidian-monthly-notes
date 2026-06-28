@@ -8,6 +8,7 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	AbstractInputSuggest,
 } from "./__mocks__/obsidian";
 
 mock.module("obsidian", () => ({
@@ -19,4 +20,5 @@ mock.module("obsidian", () => ({
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	AbstractInputSuggest,
 }));
